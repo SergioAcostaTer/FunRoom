@@ -32,6 +32,7 @@ wss.on('connection', async (ws: WebSocket, req: any) => {
       console.error('WebSocket error:', err);
       handleUserLeave(roomId, username, clients);
     });
+    
   } catch (err) {
     console.error('Connection error:', err);
     ws.close(4001, 'Internal server error');
