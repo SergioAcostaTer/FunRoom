@@ -1,11 +1,15 @@
 {
-  "name": "fun-room",
-  "private": true,
-  "workspaces": [
-    "services/*"
-  ],
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "ts-node": "^10.9.1"
+    "name": "fun-room",
+    "private": true,
+    "workspaces": [
+      "services/*"
+    ],
+    "scripts": {
+      "dev": "concurrently \"npm run dev --workspace=room-service\" \"npm run dev --workspace=music-service\"",
+      "start": "concurrently \"npm start --workspace=room-service\" \"npm start --workspace=music-service\""
+    },
+    "devDependencies": {
+      "concurrently": "^8.2.1"
+    }
   }
-}
+  

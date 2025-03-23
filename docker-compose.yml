@@ -1,29 +1,9 @@
 version: '3.8'
+
 services:
-  room-service:
-    build: ./services/room-service
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./services/room-service/src:/app/src
-      - ./services/room-service/tsconfig.json:/app/tsconfig.json
-    depends_on:
-      - redis
-    command: npm run dev
-
-  music-service:
-    build: ./services/music-service
-    ports:
-      - "3001:3001"
-    volumes:
-      - ./services/music-service/src:/app/src
-      - ./services/music-service/tsconfig.json:/app/tsconfig.json
-    depends_on:
-      - redis
-    command: npm run dev
-
   redis:
-    image: redis:7-alpine
+    build:
+      context: ./services/redis
     ports:
       - "6379:6379"
     volumes:

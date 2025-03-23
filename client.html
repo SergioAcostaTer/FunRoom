@@ -1,36 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Funroom Test</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-
-        #queue {
-            margin-top: 20px;
-        }
-
-        button {
-            margin: 5px;
-        }
-
-        input {
-            margin: 5px;
-            padding: 5px;
-        }
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #queue, #rooms { margin-top: 20px; }
+        button { margin: 5px; }
+        input { margin: 5px; padding: 5px; }
     </style>
 </head>
-
 <body>
     <h1>Funroom Test</h1>
 
     <div>
         <input id="roomId" type="text" placeholder="Room ID" value="test-room-123">
+        <input id="username" type="text" placeholder="Username" value="test-user">
         <button onclick="connect()">Connect</button>
         <button onclick="disconnect()">Disconnect</button>
     </div>
@@ -39,6 +25,7 @@
         <input id="songTitle" type="text" placeholder="Song Title">
         <button onclick="addSong()">Add Song</button>
         <button onclick="clearQueue()">Clear Queue</button>
+        <button onclick="refreshRooms()">Refresh Rooms</button>
     </div>
 
     <div id="status">Status: Disconnected</div>
@@ -47,36 +34,49 @@
         <ul id="queueList"></ul>
     </div>
 
+    <div id="rooms">
+        <h2>Active Rooms</h2>
+        <ul id="roomList"></ul>
+    </div>
+
     <script>
         let ws = null;
         const roomInput = document.getElementById('roomId');
+        const usernameInput = document.getElementById('username');
         const songInput = document.getElementById('songTitle');
         const statusDiv = document.getElementById('status');
         const queueList = document.getElementById('queueList');
+        const roomList = document.getElementById('roomList');
 
         function connect() {
             const roomId = roomInput.value;
-            if (!roomId) {
-                alert('Please enter a room ID');
+            const username = usernameInput.value;
+            if (!roomId || !username) {
+                alert('Please enter both room ID and username');
                 return;
             }
 
-            ws = new WebSocket(`ws://localhost:8080/room/${roomId}`);
+            ws = new WebSocket(`ws://localhost:8080/room/${roomId}?username=${username}`);
 
             ws.onopen = () => {
-                statusDiv.textContent = `Status: Connected to ${roomId}`;
+                statusDiv.textContent = `Status: Connected to ${roomId} as ${username}`;
                 console.log('Connected');
+                refreshRooms(); // Update room list on connect
             };
 
             ws.onmessage = (event) => {
                 const message = JSON.parse(event.data);
                 console.log('Received:', message);
                 updateQueue(message);
+                if (message.event === 'user_count') {
+                    refreshRooms(); // Update rooms when user count changes
+                }
             };
 
             ws.onclose = () => {
                 statusDiv.textContent = 'Status: Disconnected';
                 console.log('Disconnected');
+                refreshRooms();
             };
 
             ws.onerror = (error) => {
@@ -95,6 +95,7 @@
         function addSong() {
             const roomId = roomInput.value;
             const title = songInput.value;
+            console.log('Adding song:', roomId, title);
             if (!roomId || !title) {
                 alert('Please enter both room ID and song title');
                 return;
@@ -108,7 +109,7 @@
                 .then(res => res.json())
                 .then(data => {
                     console.log('Song added:', data);
-                    songInput.value = ''; // Clear input
+                    songInput.value = '';
                 })
                 .catch(err => console.error('Error adding song:', err));
         }
@@ -128,25 +129,42 @@
                 .catch(err => console.error('Error clearing queue:', err));
         }
 
-        function updateQueue(message) {
-            if (message.event === 'initial_state' || message.event === 'song_added') {
-                // Fetch the latest queue state
-                const roomId = roomInput.value;
-                fetch(`http://localhost:3001/queue/${roomId}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        queueList.innerHTML = '';
-                        data.queue.forEach(song => {
-                            const li = document.createElement('li');
-                            li.textContent = song.name;
-                            queueList.appendChild(li);
-                        });
+        function refreshRooms() {
+            fetch('http://localhost:3001/rooms')
+                .then(res => res.json())
+                .then(data => {
+                    roomList.innerHTML = '';
+                    data.rooms.forEach(room => {
+                        const li = document.createElement('li');
+                        li.textContent = `${room.roomId} (${room.users} users)`;
+                        roomList.appendChild(li);
                     });
+                })
+                .catch(err => console.error('Error fetching rooms:', err));
+        }
+
+        function updateQueue(message) {
+            if (message.event === 'initial_state') {
+                queueList.innerHTML = '';
+                message.data.queue.forEach(song => {
+                    const li = document.createElement('li');
+                    li.textContent = song.name;
+                    queueList.appendChild(li);
+                });
+            } else if (message.event === 'song_added') {
+                const li = document.createElement('li');
+                li.textContent = message.data.name;
+                queueList.appendChild(li);
             } else if (message.event === 'queue_cleared') {
                 queueList.innerHTML = '';
+            } else if (message.event === 'user_count') {
+                // Update the room list with new user count
+                refreshRooms();
             }
         }
+
+        // Initial room list load
+        refreshRooms();
     </script>
 </body>
-
 </html>
