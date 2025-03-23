@@ -5,36 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Funroom Test</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            max-width: 800px; 
+            margin: 0 auto;
+        }
         #queue, #rooms { margin-top: 20px; }
-        button { margin: 5px; }
-        input { margin: 5px; padding: 5px; }
+        button { 
+            margin: 5px; 
+            padding: 8px 15px; 
+            cursor: pointer;
+        }
+        input { 
+            margin: 5px; 
+            padding: 8px; 
+            width: 200px;
+        }
+        .section { 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            border-radius: 5px;
+        }
+        #status { 
+            font-weight: bold; 
+            color: #666;
+        }
+        ul { list-style: none; padding: 0; }
+        li { padding: 5px 0; }
     </style>
 </head>
 <body>
     <h1>Funroom Test</h1>
 
-    <div>
+    <div class="section">
         <input id="roomId" type="text" placeholder="Room ID" value="test-room-123">
         <input id="username" type="text" placeholder="Username" value="test-user">
         <button onclick="connect()">Connect</button>
         <button onclick="disconnect()">Disconnect</button>
     </div>
 
-    <div>
-        <input id="songTitle" type="text" placeholder="Song Title">
-        <button onclick="addSong()">Add Song</button>
-        <button onclick="clearQueue()">Clear Queue</button>
-        <button onclick="refreshRooms()">Refresh Rooms</button>
+    <div class="section">
+        <input id="message" type="text" placeholder="Message">
+        <button onclick="sendMessage()">Send Message</button>
+        <button onclick="startSpotify()">Start Spotify Room</button>
     </div>
 
     <div id="status">Status: Disconnected</div>
-    <div id="queue">
+    
+    <div id="queue" class="section">
         <h2>Queue</h2>
         <ul id="queueList"></ul>
     </div>
 
-    <div id="rooms">
+    <div id="rooms" class="section">
         <h2>Active Rooms</h2>
         <ul id="roomList"></ul>
     </div>
@@ -43,14 +68,15 @@
         let ws = null;
         const roomInput = document.getElementById('roomId');
         const usernameInput = document.getElementById('username');
-        const songInput = document.getElementById('songTitle');
+        const messageInput = document.getElementById('message');
         const statusDiv = document.getElementById('status');
         const queueList = document.getElementById('queueList');
         const roomList = document.getElementById('roomList');
 
         function connect() {
-            const roomId = roomInput.value;
-            const username = usernameInput.value;
+            const roomId = roomInput.value.trim();
+            const username = usernameInput.value.trim();
+            
             if (!roomId || !username) {
                 alert('Please enter both room ID and username');
                 return;
@@ -61,110 +87,114 @@
             ws.onopen = () => {
                 statusDiv.textContent = `Status: Connected to ${roomId} as ${username}`;
                 console.log('Connected');
-                refreshRooms(); // Update room list on connect
             };
 
             ws.onmessage = (event) => {
                 const message = JSON.parse(event.data);
                 console.log('Received:', message);
-                updateQueue(message);
-                if (message.event === 'user_count') {
-                    refreshRooms(); // Update rooms when user count changes
-                }
+                handleMessage(message);
             };
 
-            ws.onclose = () => {
-                statusDiv.textContent = 'Status: Disconnected';
-                console.log('Disconnected');
-                refreshRooms();
+            ws.onclose = (event) => {
+                statusDiv.textContent = `Status: Disconnected (Code: ${event.code})`;
+                console.log('Disconnected:', event);
+                ws = null;
             };
 
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                statusDiv.textContent = 'Status: Error';
+                statusDiv.textContent = 'Status: Connection Error';
             };
         }
 
         function disconnect() {
             if (ws) {
                 ws.close();
-                ws = null;
             }
         }
 
-        function addSong() {
-            const roomId = roomInput.value;
-            const title = songInput.value;
-            console.log('Adding song:', roomId, title);
-            if (!roomId || !title) {
-                alert('Please enter both room ID and song title');
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Please connect first');
+                return;
+            }
+            const message = messageInput.value.trim();
+            if (!message) {
+                alert('Please enter a message');
                 return;
             }
 
-            fetch('http://localhost:3001/queue', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roomId, title })
-            })
-                .then(res => res.json())
-                .then(data => {
-                    console.log('Song added:', data);
-                    songInput.value = '';
-                })
-                .catch(err => console.error('Error adding song:', err));
+            ws.send(JSON.stringify({
+                event: 'send_message',
+                data: { message }
+            }));
+            messageInput.value = '';
         }
 
-        function clearQueue() {
-            const roomId = roomInput.value;
-            if (!roomId) {
-                alert('Please enter a room ID');
+        function startSpotify() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Please connect first');
                 return;
             }
 
-            fetch(`http://localhost:3001/queue/${roomId}`, {
-                method: 'DELETE'
-            })
-                .then(res => res.json())
-                .then(data => console.log('Queue cleared:', data))
-                .catch(err => console.error('Error clearing queue:', err));
+            ws.send(JSON.stringify({
+                event: 'start_spotify_room',
+                data: {}
+            }));
         }
 
-        function refreshRooms() {
-            fetch('http://localhost:3001/rooms')
-                .then(res => res.json())
-                .then(data => {
-                    roomList.innerHTML = '';
-                    data.rooms.forEach(room => {
-                        const li = document.createElement('li');
-                        li.textContent = `${room.roomId} (${room.users} users)`;
-                        roomList.appendChild(li);
-                    });
-                })
-                .catch(err => console.error('Error fetching rooms:', err));
+        function handleMessage(message) {
+            switch (message.event) {
+                case 'initial_state':
+                    updateQueue(message.data.queue);
+                    updateUserCount(message.data.users);
+                    break;
+                case 'chat_message':
+                    addToQueue(`${message.data.username}: ${message.data.message}`);
+                    break;
+                case 'spotify_room_started':
+                    addToQueue(message.data.message);
+                    break;
+                case 'user_count':
+                    updateRoomList(message.data.roomId, message.data.users);
+                    break;
+                case 'error':
+                    alert(`Error: ${message.data.message}`);
+                    break;
+            }
         }
 
-        function updateQueue(message) {
-            if (message.event === 'initial_state') {
-                queueList.innerHTML = '';
-                message.data.queue.forEach(song => {
-                    const li = document.createElement('li');
-                    li.textContent = song.name;
-                    queueList.appendChild(li);
-                });
-            } else if (message.event === 'song_added') {
+        function updateQueue(queue) {
+            queueList.innerHTML = '';
+            queue.forEach(item => {
                 const li = document.createElement('li');
-                li.textContent = message.data.name;
+                li.textContent = typeof item === 'string' ? item : item.name || JSON.stringify(item);
                 queueList.appendChild(li);
-            } else if (message.event === 'queue_cleared') {
-                queueList.innerHTML = '';
-            } else if (message.event === 'user_count') {
-                // Update the room list with new user count
-                refreshRooms();
-            }
+            });
         }
 
-        // Initial room list load
-        refreshRooms();
+        function addToQueue(message) {
+            const li = document.createElement('li');
+            li.textContent = message;
+            queueList.appendChild(li);
+        }
+
+        function updateRoomList(roomId, users) {
+            let roomItem = Array.from(roomList.children).find(
+                li => li.textContent.startsWith(roomId)
+            );
+            
+            if (!roomItem) {
+                roomItem = document.createElement('li');
+                roomList.appendChild(roomItem);
+            }
+            roomItem.textContent = `${roomId} (${users} users)`;
+        }
+
+        function updateUserCount(users) {
+            const roomId = roomInput.value;
+            updateRoomList(roomId, users);
+        }
     </script>
 </body>
 </html>
