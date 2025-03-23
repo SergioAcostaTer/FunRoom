@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Funroom Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        #queue {
+            margin-top: 20px;
+        }
+
+        button {
+            margin: 5px;
+        }
+
+        input {
+            margin: 5px;
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Funroom Test</h1>
+
+    <div>
+        <input id="roomId" type="text" placeholder="Room ID" value="test-room-123">
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+
+    <div>
+        <input id="songTitle" type="text" placeholder="Song Title">
+        <button onclick="addSong()">Add Song</button>
+        <button onclick="clearQueue()">Clear Queue</button>
+    </div>
+
+    <div id="status">Status: Disconnected</div>
+    <div id="queue">
+        <h2>Queue</h2>
+        <ul id="queueList"></ul>
+    </div>
+
+    <script>
+        let ws = null;
+        const roomInput = document.getElementById('roomId');
+        const songInput = document.getElementById('songTitle');
+        const statusDiv = document.getElementById('status');
+        const queueList = document.getElementById('queueList');
+
+        function connect() {
+            const roomId = roomInput.value;
+            if (!roomId) {
+                alert('Please enter a room ID');
+                return;
+            }
+
+            ws = new WebSocket(`ws://localhost:8080/room/${roomId}`);
+
+            ws.onopen = () => {
+                statusDiv.textContent = `Status: Connected to ${roomId}`;
+                console.log('Connected');
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                console.log('Received:', message);
+                updateQueue(message);
+            };
+
+            ws.onclose = () => {
+                statusDiv.textContent = 'Status: Disconnected';
+                console.log('Disconnected');
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                statusDiv.textContent = 'Status: Error';
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function addSong() {
+            const roomId = roomInput.value;
+            const title = songInput.value;
+            if (!roomId || !title) {
+                alert('Please enter both room ID and song title');
+                return;
+            }
+
+            fetch('http://localhost:3001/queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ roomId, title })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    console.log('Song added:', data);
+                    songInput.value = ''; // Clear input
+                })
+                .catch(err => console.error('Error adding song:', err));
+        }
+
+        function clearQueue() {
+            const roomId = roomInput.value;
+            if (!roomId) {
+                alert('Please enter a room ID');
+                return;
+            }
+
+            fetch(`http://localhost:3001/queue/${roomId}`, {
+                method: 'DELETE'
+            })
+                .then(res => res.json())
+                .then(data => console.log('Queue cleared:', data))
+                .catch(err => console.error('Error clearing queue:', err));
+        }
+
+        function updateQueue(message) {
+            if (message.event === 'initial_state' || message.event === 'song_added') {
+                // Fetch the latest queue state
+                const roomId = roomInput.value;
+                fetch(`http://localhost:3001/queue/${roomId}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        queueList.innerHTML = '';
+                        data.queue.forEach(song => {
+                            const li = document.createElement('li');
+                            li.textContent = song.name;
+                            queueList.appendChild(li);
+                        });
+                    });
+            } else if (message.event === 'queue_cleared') {
+                queueList.innerHTML = '';
+            }
+        }
+    </script>
+</body>
+
+</html>
